@@ -5,7 +5,11 @@
   "main": "app.js",
   "dependencies": {
     "then-request": "latest",
-    "xmldom": "^0.1.19"
+    "xmldom": "^0.1.19",
+    "body-parser": "latest",
+    "http-auth": "latest",
+    "jsonwebtoken": "latest",
+    "express": "latest"
   },
   "devDependencies": {},
   "scripts": {
@@ -13,8 +17,8 @@
   },
   "repository" :
   { "type" : "git"
-  , "url" : "https://github.com/bikerp/dsp-w215-hnap.git"
+  , "url" : "https://github.com/soerup/dsp-w215-hnap.git"
   },
-  "author": "bikerp",
+  "author": "bikerp, soerup",
   "license": "MIT"
 }
