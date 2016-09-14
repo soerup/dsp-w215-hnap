@@ -104,3 +104,17 @@ Return:
 
 Which means the plugs is in it's off state
 
+Installation
+===============
+
+Install Node.js (Google it!)  
+Checkout this repo   
+In the the checkout folder run  
+```
+npm  install
+```
+Copy example_config.js to config.js and edit according to your environment.  
+Start server (interactive mode):  
+```
+node service.js
+```
