@@ -4,40 +4,47 @@ var DOMParser = require('xmldom').DOMParser;
 var fs = require("fs");
 var AES = require('./AES');
 
-var HNAP1_XMLNS = "http://purenetworks.com/HNAP1/";
-var HNAP_METHOD = "POST";
-var HNAP_BODY_ENCODING = "UTF8";
-var HNAP_LOGIN_METHOD = "Login";
+var CONST_XMLNS = "http://purenetworks.com/HNAP1/";
+var CONST_METHOD = "POST";
+var CONST_BODY_ENCODING = "UTF8";
+var CONST_LOGIN_METHOD = "Login";
 
-var HNAP_AUTH = {URL: "", User: "", Pwd: "", Result: "", Challenge: "", PublicKey: "", Cookie: "", PrivateKey: ""};
+exports.SoapClient = function(password, url) {
+    this.password = password;
+    this.url = url;
+};
 
-exports.login = function (user, password, url) {
-    HNAP_AUTH.User = user;
-    HNAP_AUTH.Pwd = password;
-    HNAP_AUTH.URL = url;
+exports.login = function(sc) {
+    headersSoapAction = '"' + CONST_XMLNS + CONST_LOGIN_METHOD + '"'; 
+    bodyContent = requestBody(CONST_LOGIN_METHOD, loginRequest());
 
-    return request(HNAP_METHOD, HNAP_AUTH.URL,
+    return request(CONST_METHOD, sc.url,
         {
             headers: {
                 "Content-Type": "text/xml; charset=utf-8",
-                "SOAPAction": '"' + HNAP1_XMLNS + HNAP_LOGIN_METHOD + '"'
+                "SOAPAction": headersSoapAction
             },
-            body: requestBody(HNAP_LOGIN_METHOD, loginRequest())
+            body: bodyContent 
         }).then(function (response) {
-        save_login_result(response.getBody(HNAP_BODY_ENCODING));
-        return soapAction(HNAP_LOGIN_METHOD, "LoginResult", requestBody(HNAP_LOGIN_METHOD, loginParameters()));
+        
+        sc.loginResult = save_login_result(response.getBody(CONST_BODY_ENCODING), sc.password);
+        
+        sa = soapAction(CONST_LOGIN_METHOD, "LoginResult", requestBody(CONST_LOGIN_METHOD, loginParameters(sc.loginResult)), sc);
+        return sa;
     }).catch(function (err) {
         console.log("error:", err);
     });
 };
-
-function save_login_result(body) {
+function save_login_result(body, pw) {
     var doc = new DOMParser().parseFromString(body);
-    HNAP_AUTH.Result = doc.getElementsByTagName(HNAP_LOGIN_METHOD + "Result").item(0).firstChild.nodeValue;
-    HNAP_AUTH.Challenge = doc.getElementsByTagName("Challenge").item(0).firstChild.nodeValue;
-    HNAP_AUTH.PublicKey = doc.getElementsByTagName("PublicKey").item(0).firstChild.nodeValue;
-    HNAP_AUTH.Cookie = doc.getElementsByTagName("Cookie").item(0).firstChild.nodeValue;
-    HNAP_AUTH.PrivateKey = md5.hex_hmac_md5(HNAP_AUTH.PublicKey + HNAP_AUTH.Pwd, HNAP_AUTH.Challenge).toUpperCase();
+
+    loginResult = new Object();
+    loginResult.Result = doc.getElementsByTagName(CONST_LOGIN_METHOD + "Result").item(0).firstChild.nodeValue;
+    loginResult.Challenge = doc.getElementsByTagName("Challenge").item(0).firstChild.nodeValue;
+    loginResult.PublicKey = doc.getElementsByTagName("PublicKey").item(0).firstChild.nodeValue;
+    loginResult.Cookie = doc.getElementsByTagName("Cookie").item(0).firstChild.nodeValue;
+    loginResult.PrivateKey = md5.hex_hmac_md5(loginResult.PublicKey + pw, loginResult.Challenge).toUpperCase();
+    return loginResult;
 }
 
 function requestBody(method, parameters) {
@@ -47,7 +54,7 @@ function requestBody(method, parameters) {
         "xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" " +
         "xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">" +
         "<soap:Body>" +
-        "<" + method + " xmlns=\"" + HNAP1_XMLNS + "\">" +
+        "<" + method + " xmlns=\"" + CONST_XMLNS + "\">" +
         parameters +
         "</" + method + ">" +
         "</soap:Body></soap:Envelope>";
@@ -67,121 +74,121 @@ function radioParameters(radio) {
     return "<RadioID>" + radio + "</RadioID>";
 }
 
-function soapAction(method, responseElement, body) {
-    return request(HNAP_METHOD, HNAP_AUTH.URL,
+function soapAction(method, responseElement, body, sc) {
+    return request(CONST_METHOD, sc.url,
         {
             headers: {
                 "Content-Type": "text/xml; charset=utf-8",
-                "SOAPAction": '"' + HNAP1_XMLNS + method + '"',
-                "HNAP_AUTH": getHnapAuth('"' + HNAP1_XMLNS + method + '"', HNAP_AUTH.PrivateKey),
-                "Cookie": "uid=" + HNAP_AUTH.Cookie
+                "SOAPAction": '"' + CONST_XMLNS + method + '"',
+                "HNAP_AUTH": getHnapAuth('"' + CONST_XMLNS + method + '"', sc.loginResult.PrivateKey),
+                "Cookie": "uid=" + sc.loginResult.Cookie
             },
             body: body
         }).then(function (response) {
-        return readResponseValue(response.getBody(HNAP_BODY_ENCODING), responseElement);
+        return readResponseValue(response.getBody(CONST_BODY_ENCODING), responseElement);
     }).catch(function (err) {
         console.log("error:", err);
     });
 }
 
-exports.on = function () {
-    return soapAction("SetSocketSettings", "SetSocketSettingsResult", requestBody("SetSocketSettings", controlParameters(1, true)));
+exports.on = function (sc) {
+    return soapAction("SetSocketSettings", "SetSocketSettingsResult", requestBody("SetSocketSettings", controlParameters(1, true)), sc);
 };
 
-exports.off = function () {
-    return soapAction("SetSocketSettings", "SetSocketSettingsResult", requestBody("SetSocketSettings", controlParameters(1, false)));
+exports.off = function (sc) {
+    return soapAction("SetSocketSettings", "SetSocketSettingsResult", requestBody("SetSocketSettings", controlParameters(1, false)), sc);
 };
 
-exports.state = function () {
-    return soapAction("GetSocketSettings", "OPStatus", requestBody("GetSocketSettings", moduleParameters(1)));
+exports.state = function (sc) {
+    return soapAction("GetSocketSettings", "OPStatus", requestBody("GetSocketSettings", moduleParameters(1)), sc);
 };
 
-exports.consumption = function () {
-    return soapAction("GetCurrentPowerConsumption", "CurrentConsumption", requestBody("GetCurrentPowerConsumption", moduleParameters(2)));
+exports.consumption = function (sc) {
+    return soapAction("GetCurrentPowerConsumption", "CurrentConsumption", requestBody("GetCurrentPowerConsumption", moduleParameters(2)), sc);
 };
 
-exports.totalConsumption = function () {
-    return soapAction("GetPMWarningThreshold", "TotalConsumption", requestBody("GetPMWarningThreshold", moduleParameters(2)));
+exports.totalConsumption = function (sc) {
+    return soapAction("GetPMWarningThreshold", "TotalConsumption", requestBody("GetPMWarningThreshold", moduleParameters(2)), sc);
 };
 
-exports.temperature = function () {
-    return soapAction("GetCurrentTemperature", "CurrentTemperature", requestBody("GetCurrentTemperature", moduleParameters(3)));
+exports.temperature = function (sc) {
+    return soapAction("GetCurrentTemperature", "CurrentTemperature", requestBody("GetCurrentTemperature", moduleParameters(3)), sc);
 };
 
-exports.getAPClientSettings = function () {
-    return soapAction("GetAPClientSettings", "GetAPClientSettingsResult", requestBody("GetAPClientSettings", radioParameters("RADIO_2.4GHz")));
+exports.getAPClientSettings = function (sc) {
+    return soapAction("GetAPClientSettings", "GetAPClientSettingsResult", requestBody("GetAPClientSettings", radioParameters("RADIO_2.4GHz")), sc);
 };
 
-exports.setPowerWarning = function () {
-    return soapAction("SetPMWarningThreshold", "SetPMWarningThresholdResult", requestBody("SetPMWarningThreshold", powerWarningParameters()));
+exports.setPowerWarning = function (sc) {
+    return soapAction("SetPMWarningThreshold", "SetPMWarningThresholdResult", requestBody("SetPMWarningThreshold", powerWarningParameters()), sc);
 };
 
-exports.getPowerWarning = function () {
-    return soapAction("GetPMWarningThreshold", "GetPMWarningThresholdResult", requestBody("GetPMWarningThreshold", moduleParameters(2)));
+exports.getPowerWarning = function (sc) {
+    return soapAction("GetPMWarningThreshold", "GetPMWarningThresholdResult", requestBody("GetPMWarningThreshold", moduleParameters(2)), sc);
 };
 
-exports.getTemperatureSettings = function () {
-    return soapAction("GetTempMonitorSettings", "GetTempMonitorSettingsResult", requestBody("GetTempMonitorSettings", moduleParameters(3)));
+exports.getTemperatureSettings = function (sc) {
+    return soapAction("GetTempMonitorSettings", "GetTempMonitorSettingsResult", requestBody("GetTempMonitorSettings", moduleParameters(3)), sc);
 };
 
-exports.setTemperatureSettings = function () {
-    return soapAction("SetTempMonitorSettings", "SetTempMonitorSettingsResult", requestBody("SetTempMonitorSettings", temperatureSettingsParameters(3)));
+exports.setTemperatureSettings = function (sc) {
+    return soapAction("SetTempMonitorSettings", "SetTempMonitorSettingsResult", requestBody("SetTempMonitorSettings", temperatureSettingsParameters(3)), sc);
 };
 
-exports.getSiteSurvey = function () {
-    return soapAction("GetSiteSurvey", "GetSiteSurveyResult", requestBody("GetSiteSurvey", radioParameters("RADIO_2.4GHz")));
+exports.getSiteSurvey = function (sc) {
+    return soapAction("GetSiteSurvey", "GetSiteSurveyResult", requestBody("GetSiteSurvey", radioParameters("RADIO_2.4GHz")), sc);
 };
 
-exports.triggerWirelessSiteSurvey = function () {
-    return soapAction("SetTriggerWirelessSiteSurvey", "SetTriggerWirelessSiteSurveyResult", requestBody("SetTriggerWirelessSiteSurvey", radioParameters("RADIO_2.4GHz")));
+exports.triggerWirelessSiteSurvey = function (sc) {
+    return soapAction("SetTriggerWirelessSiteSurvey", "SetTriggerWirelessSiteSurveyResult", requestBody("SetTriggerWirelessSiteSurvey", radioParameters("RADIO_2.4GHz")), sc);
 };
 
-exports.latestDetection = function () {
-    return soapAction("GetLatestDetection", "GetLatestDetectionResult", requestBody("GetLatestDetection", moduleParameters(2)));
+exports.latestDetection = function (sc) {
+    return soapAction("GetLatestDetection", "GetLatestDetectionResult", requestBody("GetLatestDetection", moduleParameters(2)), sc);
 };
 
-exports.reboot = function () {
-    return soapAction("Reboot", "RebootResult", requestBody("Reboot", ""));
+exports.reboot = function (sc) {
+    return soapAction("Reboot", "RebootResult", requestBody("Reboot", ""), sc);
 };
 
-exports.isDeviceReady = function () {
-    return soapAction("IsDeviceReady", "IsDeviceReadyResult", requestBody("IsDeviceReady", ""));
+exports.isDeviceReady = function (sc) {
+    return soapAction("IsDeviceReady", "IsDeviceReadyResult", requestBody("IsDeviceReady", ""), sc);
 };
 
-exports.getModuleSchedule = function () {
-    return soapAction("GetModuleSchedule", "GetModuleScheduleResult", requestBody("GetModuleSchedule", moduleParameters(0)));
+exports.getModuleSchedule = function (sc) {
+    return soapAction("GetModuleSchedule", "GetModuleScheduleResult", requestBody("GetModuleSchedule", moduleParameters(0)), sc);
 };
 
-exports.getModuleEnabled = function () {
-    return soapAction("GetModuleEnabled", "GetModuleEnabledResult", requestBody("GetModuleEnabled", moduleParameters(0)));
+exports.getModuleEnabled = function (sc) {
+    return soapAction("GetModuleEnabled", "GetModuleEnabledResult", requestBody("GetModuleEnabled", moduleParameters(0)), sc);
 };
 
-exports.getModuleGroup = function () {
-    return soapAction("GetModuleGroup", "GetModuleGroupResult", requestBody("GetModuleGroup", groupParameters(0)));
+exports.getModuleGroup = function (sc) {
+    return soapAction("GetModuleGroup", "GetModuleGroupResult", requestBody("GetModuleGroup", groupParameters(0)), sc);
 };
 
-exports.getScheduleSettings = function () {
-    return soapAction("GetScheduleSettings", "GetScheduleSettingsResult", requestBody("GetScheduleSettings", ""));
+exports.getScheduleSettings = function (sc) {
+    return soapAction("GetScheduleSettings", "GetScheduleSettingsResult", requestBody("GetScheduleSettings", ""), sc);
 };
 
-exports.setFactoryDefault = function () {
-    return soapAction("SetFactoryDefault", "SetFactoryDefaultResult", requestBody("SetFactoryDefault", ""));
+exports.setFactoryDefault = function (sc) {
+    return soapAction("SetFactoryDefault", "SetFactoryDefaultResult", requestBody("SetFactoryDefault", ""), sc);
 };
 
-exports.getWLanRadios = function () {
-    return soapAction("GetWLanRadios", "GetWLanRadiosResult", requestBody("GetWLanRadios", ""));
+exports.getWLanRadios = function (sc) {
+    return soapAction("GetWLanRadios", "GetWLanRadiosResult", requestBody("GetWLanRadios", ""), sc);
 };
 
-exports.getInternetSettings = function () {
-    return soapAction("GetInternetSettings", "GetInternetSettingsResult", requestBody("GetInternetSettings", ""));
+exports.getInternetSettings = function (sc) {
+    return soapAction("GetInternetSettings", "GetInternetSettingsResult", requestBody("GetInternetSettings", ""), sc);
 };
 
-exports.setAPClientSettings = function () {
-    return soapAction("SetAPClientSettings", "SetAPClientSettingsResult", requestBody("SetAPClientSettings", APClientParameters()));
+exports.setAPClientSettings = function (sc) {
+    return soapAction("SetAPClientSettings", "SetAPClientSettingsResult", requestBody("SetAPClientSettings", APClientParameters()), sc);
 };
 
-exports.settriggerADIC = function () {
-    return soapAction("SettriggerADIC", "SettriggerADICResult", requestBody("SettriggerADIC", ""));
+exports.settriggerADIC = function (sc) {
+    return soapAction("SettriggerADIC", "SettriggerADICResult", requestBody("SettriggerADIC", ""), sc);
 };
 
 function APClientParameters(group) {
@@ -221,15 +228,15 @@ function powerWarningParameters() {
 
 function loginRequest() {
     return "<Action>request</Action>"
-        + "<Username>" + HNAP_AUTH.User + "</Username>"
+        + "<Username>admin</Username>"
         + "<LoginPassword></LoginPassword>"
         + "<Captcha></Captcha>";
 }
 
-function loginParameters() {
-    var login_pwd = md5.hex_hmac_md5(HNAP_AUTH.PrivateKey, HNAP_AUTH.Challenge);
+function loginParameters(loginResult) {
+    var login_pwd = md5.hex_hmac_md5(loginResult.PrivateKey, loginResult.Challenge);
     return "<Action>login</Action>"
-        + "<Username>" + HNAP_AUTH.User + "</Username>"
+        + "<Username>admin</Username>"
         + "<LoginPassword>" + login_pwd.toUpperCase() + "</LoginPassword>"
         + "<Captcha></Captcha>";
 }
@@ -248,3 +255,5 @@ function readResponseValue(body, elementName) {
         return (node) ? node.firstChild.nodeValue : "ERROR";
     }
 }
+
+
