@@ -123,3 +123,5 @@ If you want to run the API server automatically on Ubuntu flavors here is a link
 
 https://www.axllent.org/docs/view/nodejs-service-with-systemd/  
 
+raspbian folder contains service file that works for me during development with a Raspbian Jessie installation. It should be trivial to update for a similar setup.
+
