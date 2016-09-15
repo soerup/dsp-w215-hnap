@@ -1,0 +1,14 @@
+[Unit]
+Description=D-link Smart Plug DSP-W215 Api Service
+ 
+[Service]
+ExecStart=/usr/local/bin/node /home/pi/src/dsp-w215-hnap/service.js
+Restart=always
+RestartSec=10
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=dlinkapi
+ 
+[Install]
+WantedBy=multi-user.target
+
