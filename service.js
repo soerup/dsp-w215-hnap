@@ -116,11 +116,12 @@ apiRoutes.use(function(req, res, next) {
 
   var plug = req.body.plug || req.query.plug || req.headers['x-access-plug'];
 
-  // decode token
   if (plug) {
     console.log("Plug: " + plug); 
+    
     if (!(plug in sClients)) {
         res.json({ success: false, message: 'Unknown plug.' });
+        // return an appropiate error state
     } else {
         next();
     }
