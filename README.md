@@ -121,4 +121,5 @@ node service.js
 
 If you want to run the API server automatically on Ubuntu flavors here is a link describing how it can be done:  
 
-http://www.slidequest.com/q/70ang 
+https://www.axllent.org/docs/view/nodejs-service-with-systemd/  
+
